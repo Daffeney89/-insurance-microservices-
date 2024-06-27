@@ -1,0 +1,45 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/your-repo/insurance-microservices.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn -f claims-service/pom.xml clean package'
+                sh 'mvn -f policy-service/pom.xml clean package'
+                sh 'mvn -f customer-service/pom.xml clean package'
+            }
+        }
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    dockerImage = docker.build("your-repo/claims-service:${env.BUILD_ID}", "claims-service/.")
+                    dockerImage.push()
+                    dockerImage = docker.build("your-repo/policy-service:${env.BUILD_ID}", "policy-service/.")
+                    dockerImage.push()
+                    dockerImage = docker.build("your-repo/customer-service:${env.BUILD_ID}", "customer-service/.")
+                    dockerImage.push()
+                }
+            }
+        }
+        stage('Deploy to ECS') {
+            steps {
+                script {
+                    sh 'aws ecs update-service --cluster InsuranceCluster --service claims-service --force-new-deployment'
+                    sh 'aws ecs update-service --cluster InsuranceCluster --service policy-service --force-new-deployment'
+                    sh 'aws ecs update-service --cluster InsuranceCluster --service customer-service --force-new-deployment'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
